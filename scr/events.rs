@@ -1,72 +1,72 @@
-//! Sistema de eventos do Luna Code.
-//!
-//! Callbacks são executados dentro de catch_unwind — um panic em um
-//! subscriber nunca derruba a operação do editor nem afeta outros subscribers.
+use crate::types::{DocumentId, Position, Range};
+use thiserror::Error;
 
-use std::{collections::HashMap, panic};
-use crate::types::{DocumentId, Position, Range, SubscriptionId};
+#[derive(Debug, Error)]
+pub enum LunaError {
+    #[error("documento não encontrado: {0}")]
+    DocumentNotFound(DocumentId),
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum EventKind {
-    FileOpened,
-    FileSaved,
-    FileClosed,
-    CursorMoved,
-    TextChanged,
+    #[error("arquivo já aberto: '{0}'")]
+    DocumentAlreadyOpen(String),
+
+    #[error("documento {0} não tem caminho definido; use save_file_as")]
+    UnsavedDocument(DocumentId),
+
+    #[error("posição inválida {position} no documento {doc_id} ({detail})")]
+    InvalidPosition {
+        doc_id: DocumentId,
+        position: Position,
+        detail: String,
+    },
+
+    #[error("range inválido {range} no documento {doc_id} ({detail})")]
+    InvalidRange {
+        doc_id: DocumentId,
+        range: Range,
+        detail: String,
+    },
+
+    #[error("arquivo não encontrado: '{0}'")]
+    FileNotFound(String),
+
+    #[error("erro de I/O em '{path}': {source}")]
+    IoError {
+        path: String,
+        #[source]
+        source: std::io::Error,
+    },
+
+    #[error("comando não registrado: '{0}'")]
+    CommandNotFound(String),
+
+    #[error("comando '{0}' já está registrado; cancele o registro anterior ou use um nome diferente")]
+    CommandAlreadyRegistered(String),
+
+    #[error("falha ao executar o comando '{name}': {reason}")]
+    CommandExecutionFailed { name: String, reason: String },
+
+    #[error("erro interno: {0}")]
+    Internal(String),
 }
 
-#[derive(Debug, Clone)]
-pub enum Event {
-    FileOpened { doc_id: DocumentId, path: Option<String> },
-    FileSaved { doc_id: DocumentId, path: String },
-    FileClosed { doc_id: DocumentId },
-    CursorMoved { doc_id: DocumentId, position: Position },
-    TextChanged { doc_id: DocumentId, range: Range, new_text: String },
-}
+impl LunaError {
+    pub(crate) fn io(path: impl Into<String>, source: std::io::Error) -> Self {
+        Self::IoError { path: path.into(), source }
+    }
 
-impl Event {
-    pub fn kind(&self) -> EventKind {
-        match self {
-            Event::FileOpened { .. } => EventKind::FileOpened,
-            Event::FileSaved { .. } => EventKind::FileSaved,
-            Event::FileClosed { .. } => EventKind::FileClosed,
-            Event::CursorMoved { .. } => EventKind::CursorMoved,
-            Event::TextChanged { .. } => EventKind::TextChanged,
-        }
+    pub(crate) fn invalid_pos(
+        doc_id: DocumentId,
+        position: Position,
+        detail: impl Into<String>,
+    ) -> Self {
+        Self::InvalidPosition { doc_id, position, detail: detail.into() }
+    }
+
+    pub(crate) fn invalid_range(
+        doc_id: DocumentId,
+        range: Range,
+        detail: impl Into<String>,
+    ) -> Self {
+        Self::InvalidRange { doc_id, range, detail: detail.into() }
     }
 }
-
-type Callback = Box<dyn Fn(&Event) + Send + Sync>;
-
-pub(crate) struct EventBus {
-    subscriptions: HashMap<EventKind, Vec<(SubscriptionId, Callback)>>,
-    next_id: u64,
-}
-
-impl EventBus {
-    pub fn new() -> Self {
-        Self { subscriptions: HashMap::new(), next_id: 1 }
-    }
-
-    pub fn subscribe<F>(&mut self, kind: EventKind, callback: F) -> SubscriptionId
-    where F: Fn(&Event) + Send + Sync + 'static {
-        let id = SubscriptionId(self.next_id);
-        self.next_id += 1;
-        self.subscriptions.entry(kind).or_default().push((id, Box::new(callback)));
-        id
-    }
-
-    pub fn unsubscribe(&mut self, id: SubscriptionId) {
-        for subscribers in self.subscriptions.values_mut() {
-            subscribers.retain(|(sub_id, _)| *sub_id != id);
-        }
-    }
-
-    pub fn emit(&self, event: &Event) {
-        if let Some(subscribers) = self.subscriptions.get(&event.kind()) {
-            for (_, callback) in subscribers {
-                let _ = panic::catch_unwind(panic::AssertUnwindSafe(|| { callback(event); }));
-            }
-        }
-    }
-} 
