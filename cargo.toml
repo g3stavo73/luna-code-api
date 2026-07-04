@@ -2,6 +2,7 @@
 name = "luna-code-api"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.75"
 authors = ["Luna Code Team"]
 description = "API pública do editor Luna Code — camada segura entre o core e extensões/UI"
 license = "MIT"
@@ -14,7 +15,25 @@ name = "luna_code_api"
 crate-type = ["lib"]
 
 [dependencies]
-
 thiserror = "2"
 
 [dev-dependencies]
+
+[lints.rust]
+unsafe_code = "forbid"
+unused_must_use = "warn"
+unused_imports = "warn"
+
+[lints.clippy]
+all       = { level = "warn", priority = -1 }
+pedantic  = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc      = "allow"
+missing_panics_doc      = "allow"
+must_use_candidate      = "allow"
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1
+strip         = "symbols"
