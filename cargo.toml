@@ -1,0 +1,20 @@
+[package]
+name = "luna-code-api"
+version = "0.1.0"
+edition = "2021"
+authors = ["Luna Code Team"]
+description = "API pública do editor Luna Code — camada segura entre o core e extensões/UI"
+license = "MIT"
+repository = "https://github.com/luna-code/luna-code-api"
+keywords = ["editor", "api", "plugin", "text-editor"]
+categories = ["text-editors"]
+
+[lib]
+name = "luna_code_api"
+crate-type = ["lib"]
+
+[dependencies]
+
+thiserror = "2"
+
+[dev-dependencies]
